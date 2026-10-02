@@ -1,0 +1,14 @@
+[build]
+target = "aarch64-unknown-none" # Целевая платформа по умолчанию
+
+[target.aarch64-unknown-none]
+# Используем встроенный в Rust LLD линкер, чтобы не настраивать внешний
+linker = "rust-lld"
+
+# Подключение файла линковки
+rustflags = ["-C", "link-arg=-Tlinker.ld"]
+
+# Эта команда будет выполнена при вызове `cargo run`.
+# Она запускает QEMU с виртуальной машиной `virt`, которая эмулирует
+# ARM64-процессор, подходящий для нашего кода.
+runner = "qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a55 -smp 4 -m 1024M -nographic -serial mon:stdio -kernel"
