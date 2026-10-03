@@ -17,4 +17,8 @@ SECTIONS
     . = ALIGN(16);
     . = . + 0x10000; /* 64KB стек */
     stack_top = .;
+    . = ALIGN(4096);
+    __heap_start = .;
+    . = . + 0x100000; /* 1 MB heap */
+    __heap_end = .;
 }

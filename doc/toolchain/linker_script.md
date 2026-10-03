@@ -49,5 +49,20 @@ llvm-nm <elf>           # значения символов
 > - Не выровненный `sp` → fault при первом обращении к стеку.
 > - `.bss` не кратна 16 при `stp`-цикле → запись за границей ([[bss_alignment]]).
 
+## Символы из Rust
+
+```rust
+unsafe extern "C" {           // edition 2024: extern-блок обязан быть unsafe
+    static __bss_start: u8;   // имя = символ из linker.ld, тип — заглушка размера
+    static __bss_end: u8;
+    static stack_top: u8;
+}
+
+let bss_start = &raw const __bss_start as usize;   // адрес, НЕ значение
+```
+
+- `&raw const` (edition 2024) берёт голый адрес без создания ссылки: разыменовывать нельзя — под символом нет «переменной» этого типа.
+- Сверка: `llvm-nm <elf>` печатает те же адреса.
+
 ## Связанные заметки
-- [[boot_flow]], [[load_address]], [[bss_alignment]], [[qemu_adaptation]], [[uboot_loading]]
+- [[boot_flow]], [[load_address]], [[bss_alignment]], [[qemu_adaptation]], [[uboot_loading]], [[mmu_basics]]

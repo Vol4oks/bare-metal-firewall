@@ -22,7 +22,11 @@ tags: [moc]
 - [[multicore_path]] — одно ядро сейчас: инвариант, путь к SMP, правило для кода.
 - [[mmio_basics]] — read/write_volatile, адресная арифметика, границы volatile.
 - [[print_macros]] — гигиена макросов: $crate, concat!, format_args!.
-*Появятся: MMU, исключения, синхронизация.*
+- [[mmu_basics]] — перевод адресов L0–L3, регистры включения, план этапа 2.
+- [[a64_descriptors]] — форматы дескрипторов, биты атрибутов, AF-ловушка.
+- [[blocks_vs_pages]] — почему блоки до heap, таблица регионов как инвестиция в рост.
+- [[global_alloc]] — договор GlobalAlloc, Layout, bump-аллокатор.
+- [[raw_pointers]] — сырые указатели: операции, правила безопасности, null.
 
 ## Decisions
 - [[0001_output_first]] — ADR: сначала вывод, потом MMU.
