@@ -38,15 +38,36 @@ pub fn print_args(args: core::fmt::Arguments<'_>) {
     let mut uart = UART.lock();
     let _ = core::fmt::write(&mut *uart, args);
 }
+
+/// Для паники и фатальных исключений: не блокируется, если UART занят.
+pub fn try_print_args(args: core::fmt::Arguments<'_>) -> bool {
+    if let Some(mut uart) = UART.try_lock() {
+        let _ = core::fmt::write(&mut *uart, args);
+        true
+    } else {
+        false
+    }
+}
 ```
 
-Паника:
+Паника и `unexpected` используют только `try_print_args`:
 
 ```rust
-if let Some(mut uart) = UART.try_lock() {
-    let _ = core::fmt::write(&mut *uart, format_args!("PANIC: {}\n", info.message()));
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    let _ = crate::uart::try_print_args(format_args!("PANIC: {}\n", info.message()));
+    if let Some(location) = info.location() {
+        let _ = crate::uart::try_print_args(format_args!("  at {}\n", location));
+    }
+    loop {
+        core::hint::spin_loop();
+    }
 }
-// иначе — молча остановиться, но не зависнуть
+```
+
+```rust
+// irq.rs: unexpected()
+let _ = crate::uart::try_print_args(format_args!("Unexpected exception!\n"));
 ```
 
 `Pl011::write_byte` уже принимает `&mut self`; guard даёт `&mut Pl011` через `DerefMut`.
@@ -54,12 +75,15 @@ if let Some(mut uart) = UART.try_lock() {
 ## Heap
 
 ```rust
-struct Bump {
+use core::alloc::{GlobalAlloc, Layout};
+use crate::sync::SpinLock;
+
+struct BumpState {
     ptr: usize,
     end: usize,
 }
 
-impl Bump {
+impl BumpState {
     const fn new() -> Self {
         Self { ptr: 0, end: 0 }
     }
@@ -69,7 +93,7 @@ impl Bump {
         self.end = end;
     }
 
-    fn alloc(&mut self, layout: core::alloc::Layout) -> *mut u8 {
+    fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let Some(aligned) = align_up(self.ptr, layout.align()) else {
             return core::ptr::null_mut();
         };
@@ -84,19 +108,47 @@ impl Bump {
     }
 }
 
-static HEAP: SpinLock<Bump> = SpinLock::new(Bump::new());
+struct Bump {
+    state: SpinLock<BumpState>,
+}
 
-unsafe impl GlobalAlloc for SpinLock<Bump> {
-    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        let mut bump = self.lock();
-        unsafe { bump.alloc(layout) }
+impl Bump {
+    const fn new() -> Self {
+        Self { state: SpinLock::new(BumpState::new()) }
     }
 
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: core::alloc::Layout) {}
+    fn init(&self, start: usize, end: usize) {
+        let mut state = self.state.lock();
+        state.init(start, end);
+    }
+
+    fn alloc_inner(&self, layout: Layout) -> *mut u8 {
+        let mut state = self.state.lock();
+        state.alloc(layout)
+    }
+}
+
+#[global_allocator]
+static HEAP: Bump = Bump::new();
+
+pub fn init() {
+    HEAP.init(heap_start(), heap_end());
+}
+
+unsafe impl GlobalAlloc for Bump {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        self.alloc_inner(layout)
+    }
+
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
+}
+
+fn align_up(ptr: usize, align: usize) -> Option<usize> {
+    ptr.checked_add(align - 1).map(|p| p & !(align - 1))
 }
 ```
 
-`alloc` получает `&self`, но lock даёт `&mut Bump`; внутри `Bump` больше не нужен `UnsafeCell`. `dealloc` пустой — память не переиспользуется.
+`Bump` владеет `SpinLock<BumpState>`; поэтому `Bump: Sync` получается автоматически, `unsafe impl Sync` больше не нужен. `alloc_inner` — отдельное имя, чтобы не путать с `GlobalAlloc::alloc`.
 
 ## Критическая секция vs SpinLock
 

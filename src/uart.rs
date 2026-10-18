@@ -1,6 +1,6 @@
-use core::{cell::UnsafeCell, fmt::Write};
+use core::fmt::Write;
 
-use crate::board;
+use crate::{board, sync::SpinLock};
 
 const MASK_TXFF: u8 = 1 << 5;
 
@@ -34,30 +34,25 @@ impl core::fmt::Write for Pl011 {
     }
 }
 
-/// Отладочный UART.
-///
-/// # Инвариант (до этапа 4)
-///
-/// - Доступ только с ядра 0.
-/// - В обычном контексте печатает только `main`; IRQ-обработчик не печатает.
-/// - `sync_handler`/`unexpected` печатают только на фатальных путях и могут
-///   прервать `main`; полноценной реентерабельности нет — осознанный
-///   компромисс для отладки.
-/// - `unsafe impl Sync` держится на этих инвариантах. На этапе 4 заменить
-///   на SpinLock/Mutex.
 pub struct Uart {
-    inner: UnsafeCell<Pl011>,
+    inner: SpinLock<Pl011>,
 }
 
-unsafe impl Sync for Uart {}
-
 pub static UART: Uart = Uart {
-    inner: UnsafeCell::new(Pl011::new(board::UART_BASE)),
+    inner: SpinLock::new(Pl011::new(board::UART_BASE)),
 };
 
 impl Uart {
+    ///  Обычный вывод: ждёт освобождения UART.
     pub fn with<R>(&self, f: impl FnOnce(&mut Pl011) -> R) -> R {
-        unsafe { f(&mut *self.inner.get()) }
+        let mut guard = self.inner.lock();
+        f(&mut guard)
+    }
+
+    /// Для паники/фатальных исключений: не блокируется.
+    pub fn try_with<R>(&self, f: impl FnOnce(&mut Pl011) -> R) -> Option<R> {
+        let mut guard = self.inner.try_lock()?;
+        Some(f(&mut guard))
     }
 
     #[allow(dead_code)]
@@ -71,6 +66,13 @@ impl Uart {
         self.with(|p| {
             let _ = core::fmt::write(p, args);
         });
+    }
+
+    pub fn try_print_args(&self, args: core::fmt::Arguments<'_>) -> bool {
+        self.try_with(|p| {
+            let _ = core::fmt::write(p, args);
+        })
+        .is_some()
     }
 }
 
