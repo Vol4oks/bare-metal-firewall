@@ -116,6 +116,8 @@ unsafe impl GlobalAlloc for SpinLock<Bump> {
 - `Box::new(...)` после замены heap работает.
 - `panic!` во время печати: panic handler не зависает (печатает или молча останавливается).
 
+Подробнее о selftest и host-тестах — [[no_std_testing]].
+
 ## Подводные камни
 
 > [!warning]
@@ -126,4 +128,4 @@ unsafe impl GlobalAlloc for SpinLock<Bump> {
 > - Не смешивать порядок захвата блокировок: если когда-нибудь будет две, зафиксировать порядок.
 
 ## Связанные заметки
-- [[spinlock]], [[atomic_counter]], [[memory_barriers]], [[0002_global_uart_handle]], [[global_alloc]], [[multicore_path]]
+- [[spinlock]], [[atomic_counter]], [[memory_barriers]], [[0002_global_uart_handle]], [[global_alloc]], [[multicore_path]], [[no_std_testing]]

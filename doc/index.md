@@ -37,6 +37,7 @@ tags: [moc]
 - [[atomic_counter]] — `static AtomicU32` для счётчика тиков: почему не `static mut` и что значит `Relaxed`.
 - [[memory_barriers]] — `DSB`/`DMB`/`ISB`: порядок MMIO, зачем барьер после записи в GIC и при включении MMU.
 - [[spinlock]] — `SpinLock<T>`: `AtomicBool` + `UnsafeCell`, `Acquire`/`Release`, guard, IRQ-deadlock, `try_lock`.
+- [[no_std_testing]] — тестирование no_std: selftest в QEMU и host-тесты чистой логики с `std::thread`.
 - *Появятся: critical_section, lock ordering.*
 
 ## Decisions
@@ -60,4 +61,5 @@ tags: [moc]
 - [[irq_slot_unexpected]] — ревью 3.4: `ticks = 0` + `Unexpected exception!` — IRQ-слот ещё смотрит в `unexpected`.
 - [[stage3_precommit]] — pre-commit ревью этапа 3: аппаратные нюансы (ISB/RWP/ICFGR1/EOImode), clippy, гигиена коммита.
 - [[stage3_refactor_precommit]] — ревью рефакторинга board/gic/timer: тики работают, но board не подключён к mmu/uart, clippy identity_op.
+- [[stage4_sync_precommit]] — ревью `SpinLock`/selftest: тесты проходят, но обычная сборка даёт dead_code, UART/heap ещё не переведены.
 - *Запланировано: [[board_abstraction]].*
