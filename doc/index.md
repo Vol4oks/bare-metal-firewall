@@ -36,6 +36,8 @@ tags: [moc]
 - [[irq_entry_exit]] — вход/выход из IRQ: trampoline, сохранение GPR, eret.
 - [[atomic_counter]] — `static AtomicU32` для счётчика тиков: почему не `static mut` и что значит `Relaxed`.
 - [[memory_barriers]] — `DSB`/`DMB`/`ISB`: порядок MMIO, зачем барьер после записи в GIC и при включении MMU.
+- [[spinlock]] — `SpinLock<T>`: `AtomicBool` + `UnsafeCell`, `Acquire`/`Release`, guard, IRQ-deadlock, `try_lock`.
+- *Появятся: critical_section, lock ordering.*
 
 ## Decisions
 - [[0001_output_first]] — ADR: сначала вывод, потом MMU.
@@ -46,6 +48,7 @@ tags: [moc]
 
 ## Stages
 - [[stage3_interrupts]] — разбор этапа 3 по шагам: векторы, тест fault, GICv3, ARM-таймер, DoD.
+- [[stage4_sync]] — этап 4: `SpinLock`, UART/heap под блокировкой, `try_lock` в панике, `IrqSafeSpinLock`.
 
 ## Review
 - [[load_address]] — единая база 0x42000000 для QEMU и платы.
@@ -56,4 +59,5 @@ tags: [moc]
 - [[gic_mapping_and_waker]] — ревью 3.3: GIC в MMU, биты GICR_WAKER (1/2), `IPRIORITYR` байтом, GICD_CTLR.
 - [[irq_slot_unexpected]] — ревью 3.4: `ticks = 0` + `Unexpected exception!` — IRQ-слот ещё смотрит в `unexpected`.
 - [[stage3_precommit]] — pre-commit ревью этапа 3: аппаратные нюансы (ISB/RWP/ICFGR1/EOImode), clippy, гигиена коммита.
+- [[stage3_refactor_precommit]] — ревью рефакторинга board/gic/timer: тики работают, но board не подключён к mmu/uart, clippy identity_op.
 - *Запланировано: [[board_abstraction]].*
