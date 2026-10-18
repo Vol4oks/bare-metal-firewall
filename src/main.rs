@@ -17,8 +17,6 @@ mod uart;
 
 #[cfg(feature = "selftest")]
 mod selftest;
-#[cfg(feature = "selftest")]
-mod sync;
 
 // Подключаем ассемблерный файл
 global_asm!(include_str!("start.s"));
@@ -71,11 +69,10 @@ pub extern "C" fn main() -> ! {
 // Обязательный обработчик паники для no_std
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    let _ = crate::uart::UART.try_print_args(format_args!("PANIC: {}\n", info.message()));
     if let Some(location) = info.location() {
-        println!("PANIC: {} at {}", info.message(), location,);
-    } else {
-        println!("PANIC: {}", info.message());
-    };
+        let _ = crate::uart::UART.try_print_args(format_args!(" at {}\n", location));
+    }
     loop {
         core::hint::spin_loop();
     }

@@ -1,4 +1,6 @@
-use core::{alloc::GlobalAlloc, cell::UnsafeCell};
+use core::alloc::{GlobalAlloc, Layout};
+
+use crate::sync::SpinLock;
 
 unsafe extern "C" {
     static __heap_start: u8;
@@ -12,48 +14,68 @@ pub fn heap_end() -> usize {
     &raw const __heap_end as usize
 }
 
-#[global_allocator]
-static HEAP: Bump = Bump {
-    ptr: UnsafeCell::new(0), // ← временная заглушка, см. ниже
-    end: UnsafeCell::new(0),
-};
-
-pub fn init() {
-    HEAP.init(heap_start(), heap_end());
+struct BumpState {
+    ptr: usize,
+    end: usize,
 }
 
-struct Bump {
-    ptr: UnsafeCell<usize>, // текущая позиция выделения
-    end: UnsafeCell<usize>, // __heap_and
-}
-
-impl Bump {
-    fn init(&self, start: usize, end: usize) {
-        unsafe {
-            *self.ptr.get() = start;
-            *self.end.get() = end;
-        }
+impl BumpState {
+    const fn new() -> Self {
+        Self { ptr: 0, end: 0 }
     }
-}
-unsafe impl Sync for Bump {}
-unsafe impl GlobalAlloc for Bump {
-    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        let old_p = unsafe { *self.ptr.get() };
 
-        let Some(aligned) = align_up(old_p, layout.align()) else {
+    fn init(&mut self, start: usize, end: usize) {
+        self.ptr = start;
+        self.end = end;
+    }
+
+    fn alloc(&mut self, layout: Layout) -> *mut u8 {
+        let Some(aligned) = align_up(self.ptr, layout.align()) else {
             return core::ptr::null_mut();
         };
         let Some(new_p) = aligned.checked_add(layout.size()) else {
             return core::ptr::null_mut();
         };
-        if new_p > unsafe { *self.end.get() } {
+        if new_p > self.end {
             return core::ptr::null_mut();
         }
-
-        unsafe {
-            *self.ptr.get() = new_p;
-        }
+        self.ptr = new_p;
         aligned as *mut u8
+    }
+}
+
+struct Bump {
+    state: SpinLock<BumpState>,
+}
+
+impl Bump {
+    const fn new() -> Self {
+        Self {
+            state: SpinLock::new(BumpState::new()),
+        }
+    }
+
+    fn init(&self, start: usize, end: usize) {
+        let mut state = self.state.lock();
+        state.init(start, end);
+    }
+
+    fn alloc_inner(&self, layout: Layout) -> *mut u8 {
+        let mut state = self.state.lock();
+        state.alloc(layout)
+    }
+}
+
+#[global_allocator]
+static HEAP: Bump = Bump::new();
+
+pub fn init() {
+    HEAP.init(heap_start(), heap_end());
+}
+
+unsafe impl GlobalAlloc for Bump {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        self.alloc_inner(layout)
     }
 
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: core::alloc::Layout) {}

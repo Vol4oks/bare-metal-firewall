@@ -1,12 +1,12 @@
 use core::arch::global_asm;
 
-use crate::{gic, println, timer};
+use crate::{gic, timer};
 
 global_asm!(include_str!("irq_vectors.s"));
 
 #[unsafe(no_mangle)]
 extern "C" fn unexpected() -> ! {
-    println!("Unexpected exception!");
+    let _ = crate::uart::UART.try_print_args(format_args!("Unexpected exception!\n"));
     loop {
         core::hint::spin_loop();
     }
