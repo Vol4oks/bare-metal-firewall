@@ -1,7 +1,7 @@
 use core::{cell::UnsafeCell, fmt::Write};
 
-// Адрес UART0 (PL011) в QEMU virt
-const UART_ADDR: usize = 0x0900_0000;
+use crate::board;
+
 const MASK_TXFF: u8 = 1 << 5;
 
 pub struct Pl011 {
@@ -52,7 +52,7 @@ pub struct Uart {
 unsafe impl Sync for Uart {}
 
 pub static UART: Uart = Uart {
-    inner: UnsafeCell::new(Pl011::new(UART_ADDR)),
+    inner: UnsafeCell::new(Pl011::new(board::UART_BASE)),
 };
 
 impl Uart {

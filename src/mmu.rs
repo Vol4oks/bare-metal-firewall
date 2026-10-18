@@ -1,3 +1,5 @@
+use crate::board;
+
 #[derive(Clone, Copy)]
 enum RegionSize {
     Size1G,
@@ -18,17 +20,17 @@ struct Region {
 
 const REGIONS: [Region; 3] = [
     Region {
-        va: 0x4000_0000,
+        va: board::RAM_BASE,
         size: RegionSize::Size1G,
         kind: RegionType::Normal,
     },
     Region {
-        va: 0x0800_0000,
+        va: board::GICD_BASE,
         size: RegionSize::Size2M,
         kind: RegionType::Device,
     },
     Region {
-        va: 0x0900_0000,
+        va: board::UART_BASE,
         size: RegionSize::Size2M,
         kind: RegionType::Device,
     },
@@ -41,7 +43,6 @@ pub static mut L0_TABLE: PageTable = PageTable([0; 512]);
 pub static mut L1_TABLE: PageTable = PageTable([0; 512]);
 pub static mut L2_TABLE: PageTable = PageTable([0; 512]);
 
-#[allow(clippy::deref_addrof)] // &raw mut обходит static_mut_refs (edition 2024)
 pub unsafe fn init_identity_map() {
     let l0 = unsafe { &mut *(&raw mut L0_TABLE) };
     let l1 = unsafe { &mut *(&raw mut L1_TABLE) };
@@ -83,10 +84,10 @@ pub fn l0_pa() -> usize {
 
 pub unsafe fn enable(l0_pa: usize) {
     let mair_value: u64 = 0x04FF; // Attr0=0xFF (Normal), Attr1=0x04 (Device) в байтах 1
-    let tcr_value: u64 = (16)                    // T0SZ=16 → 48-бит VA
+    let tcr_value: u64 = 16                    // T0SZ=16 → 48-бит VA
         | (0b01 << 8) | (0b01 << 10)       // IRGN0, ORGN0 — page tables WB
-        | (0b11 << 12)                     // SH0 — inner shareable
-        | (0b00 << 14); // TG0 = 4KB
+        | (0b11 << 12); // SH0 — inner shareable
+    // | (0b00 << 14); // TG0 = 4KB
     unsafe {
         core::arch::asm!(
             "msr mair_el1, {mair}",

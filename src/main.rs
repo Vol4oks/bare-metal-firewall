@@ -3,13 +3,15 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
 use core::arch::global_asm;
 use core::panic::PanicInfo;
 
+mod board;
+mod gic;
 mod heap;
 mod irq;
 mod mmu;
+mod timer;
 mod uart;
 
 // Подключаем ассемблерный файл
@@ -30,8 +32,6 @@ pub extern "C" fn main() -> ! {
     println!("__bss_end:   {:#018x}", addr2);
     let addr3 = &raw const stack_top as usize;
     println!("stack_top:   {:#018x}", addr3);
-    println!("bss size: {}", addr2 - addr1);
-    println!("stack gap: {:#x}", addr3 - addr2);
 
     println!("__heap_start: {:#018x}", heap::heap_start());
     println!("__heap_end: {:#018x}", heap::heap_end());
@@ -45,24 +45,17 @@ pub extern "C" fn main() -> ! {
     println!("MMU on!");
     let vbar = irq::init();
     println!("VBAR: {:#x}", vbar);
+
     heap::init();
-    let b = Box::new(24u64);
-    println!("heap ptr: {:#018x}, val: {}", &*b as *const u64 as usize, b);
 
     unsafe {
-        irq::init_gic();
+        gic::GIC.init();
+        gic::GIC.enable_ppi(timer::INTID, timer::PRIORITY);
+        timer::init();
+        core::arch::asm!("msr daifclr, #2", "isb");
     }
-    let freq = irq::cntfrq();
-    assert!(freq != 0, "CNTFRQ_EL0 = 0");
-    unsafe { irq::start_timer((freq / 4) as u32) };
-    unsafe { core::arch::asm!("msr daifclr, #2", "isb") };
-
-    // println!("about to fault");
-    // unsafe {
-    //     (0x1000_0000 as *mut u64).write_volatile(0); // адрес вне RAM и UART
-    // }
     loop {
-        println!("ticks = {}", irq::ticks());
+        println!("ticks = {}", timer::ticks());
         unsafe { core::arch::asm!("wfi") };
     } // Бесконечный цикл
 }
