@@ -11,8 +11,14 @@ mod gic;
 mod heap;
 mod irq;
 mod mmu;
+mod sync;
 mod timer;
 mod uart;
+
+#[cfg(feature = "selftest")]
+mod selftest;
+#[cfg(feature = "selftest")]
+mod sync;
 
 // Подключаем ассемблерный файл
 global_asm!(include_str!("start.s"));
@@ -47,6 +53,8 @@ pub extern "C" fn main() -> ! {
     println!("VBAR: {:#x}", vbar);
 
     heap::init();
+    #[cfg(feature = "selftest")]
+    selftest::run();
 
     unsafe {
         gic::GIC.init();
