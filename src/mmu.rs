@@ -43,6 +43,7 @@ pub static mut L0_TABLE: PageTable = PageTable([0; 512]);
 pub static mut L1_TABLE: PageTable = PageTable([0; 512]);
 pub static mut L2_TABLE: PageTable = PageTable([0; 512]);
 
+#[allow(clippy::deref_addrof)] // &raw mut обходит static_mut_refs (edition 2024)
 pub unsafe fn init_identity_map() {
     let l0 = unsafe { &mut *(&raw mut L0_TABLE) };
     let l1 = unsafe { &mut *(&raw mut L1_TABLE) };
