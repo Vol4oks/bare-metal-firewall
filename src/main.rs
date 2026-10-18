@@ -8,6 +8,7 @@ use core::arch::global_asm;
 use core::panic::PanicInfo;
 
 mod heap;
+mod irq;
 mod mmu;
 mod uart;
 
@@ -42,11 +43,28 @@ pub extern "C" fn main() -> ! {
         mmu::enable(mmu::l0_pa());
     }
     println!("MMU on!");
+    let vbar = irq::init();
+    println!("VBAR: {:#x}", vbar);
     heap::init();
     let b = Box::new(24u64);
     println!("heap ptr: {:#018x}, val: {}", &*b as *const u64 as usize, b);
 
-    loop {} // Бесконечный цикл
+    unsafe {
+        irq::init_gic();
+    }
+    let freq = irq::cntfrq();
+    assert!(freq != 0, "CNTFRQ_EL0 = 0");
+    unsafe { irq::start_timer((freq / 4) as u32) };
+    unsafe { core::arch::asm!("msr daifclr, #2", "isb") };
+
+    // println!("about to fault");
+    // unsafe {
+    //     (0x1000_0000 as *mut u64).write_volatile(0); // адрес вне RAM и UART
+    // }
+    loop {
+        println!("ticks = {}", irq::ticks());
+        unsafe { core::arch::asm!("wfi") };
+    } // Бесконечный цикл
 }
 
 // Обязательный обработчик паники для no_std

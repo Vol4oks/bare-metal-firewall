@@ -38,23 +38,27 @@ impl Bump {
 unsafe impl Sync for Bump {}
 unsafe impl GlobalAlloc for Bump {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        let p = self.ptr.get();
-        let old_p = unsafe { *p };
-        let aligned = align_up(old_p, layout.align());
-        let new_p = aligned + layout.size();
+        let old_p = unsafe { *self.ptr.get() };
+
+        let Some(aligned) = align_up(old_p, layout.align()) else {
+            return core::ptr::null_mut();
+        };
+        let Some(new_p) = aligned.checked_add(layout.size()) else {
+            return core::ptr::null_mut();
+        };
         if new_p > unsafe { *self.end.get() } {
             return core::ptr::null_mut();
         }
 
         unsafe {
             *self.ptr.get() = new_p;
-            aligned as *mut u8
         }
+        aligned as *mut u8
     }
 
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: core::alloc::Layout) {}
 }
 
-fn align_up(ptr: usize, align: usize) -> usize {
-    (ptr + align - 1) & !(align - 1)
+fn align_up(ptr: usize, align: usize) -> Option<usize> {
+    ptr.checked_add(align - 1).map(|p| p & !(align - 1))
 }

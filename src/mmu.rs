@@ -16,11 +16,16 @@ struct Region {
     kind: RegionType,
 }
 
-const REGIONS: [Region; 2] = [
+const REGIONS: [Region; 3] = [
     Region {
         va: 0x4000_0000,
         size: RegionSize::Size1G,
         kind: RegionType::Normal,
+    },
+    Region {
+        va: 0x0800_0000,
+        size: RegionSize::Size2M,
+        kind: RegionType::Device,
     },
     Region {
         va: 0x0900_0000,
@@ -36,6 +41,7 @@ pub static mut L0_TABLE: PageTable = PageTable([0; 512]);
 pub static mut L1_TABLE: PageTable = PageTable([0; 512]);
 pub static mut L2_TABLE: PageTable = PageTable([0; 512]);
 
+#[allow(clippy::deref_addrof)] // &raw mut обходит static_mut_refs (edition 2024)
 pub unsafe fn init_identity_map() {
     let l0 = unsafe { &mut *(&raw mut L0_TABLE) };
     let l1 = unsafe { &mut *(&raw mut L1_TABLE) };
@@ -63,9 +69,11 @@ pub unsafe fn init_identity_map() {
 }
 
 fn attrs(kind: RegionType) -> u64 {
+    // [1:0]=0b01 Block, [9:8] SH=00, [10] AF=1, [4:2] AttrIndx, [7:6] AP=00
+    let base = (1 << 10) | 0b01; // AF | Block
     match kind {
-        RegionType::Normal => (0 << 2) | (0b00 << 6) | (1 << 10) | 0b01, // AttrIndx=0, AP=00, AF, Block
-        RegionType::Device => (1 << 2) | (0b00 << 6) | (1 << 10) | 0b01, // AttrIndx=1, AP=00, AF, Block
+        RegionType::Normal => base,            // AttrIndx=0
+        RegionType::Device => base | (1 << 2), // AttrIndx=1
     }
 }
 
