@@ -1,11 +1,10 @@
 use crate::sync::SpinLock;
 
 pub fn run() {
-    crate::println!("selftest: start");
     try_lock_basics();
     lock_data();
     compile_time_traits();
-    crate::println!("selftest: OK");
+    crate::println!("sync: end");
 }
 
 fn try_lock_basics() {
