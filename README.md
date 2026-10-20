@@ -32,7 +32,8 @@
 - **MMU включён**: identity map (RAM 1 ГБ Normal, GIC 2 МБ Device, UART 2 МБ Device) через таблицы L0–L2 с блоками, `TTBR0/TCR/MAIR/SCTLR`.
 - **Heap работает**: bump-аллокатор как `#[global_allocator]`, `Box` выделяется в heap-регионе 1 МБ.
 - **Этап 3 закрыт в QEMU**: GICv3 (GICD/GICR, Group 1, PPI 27), ARM Generic Timer `CNTV`, IRQ-векторы с trampoline, `ticks` растут ~4 раза в секунду.
-- **Модули этапа 3**: `board.rs` (адреса платы), `gic.rs` (GICv3), `timer.rs` (таймер и счётчик), `irq.rs` (VBAR и диспетчер), `irq_vectors.s` (векторы).
+- **Этап 4 закрыт**: `SpinLock` (`sync.rs`), UART и bump-аллокатор под блокировкой, `try_print_args` в panic/exception, selftest (`cargo run --features selftest`).
+- **Модули этапов 3–4**: `board.rs` (адреса платы), `gic.rs` (GICv3), `timer.rs` (таймер и счётчик), `irq.rs` (VBAR и диспетчер), `irq_vectors.s` (векторы), `sync.rs` (SpinLock), `selftest/` (тесты).
 - База знаний — в `doc/` (Obsidian, карта знаний `doc/index.md`).
 
 **Что уже работает**:
@@ -42,10 +43,26 @@ $ cargo run
 Hello from QEMU virt!
 ...
 MMU on!
-VBAR: 0x42005000
+VBAR: 0x42005800
 ticks = 0
 ticks = 1
 ticks = 2
+...
+```
+
+Self-test:
+
+```
+$ cargo run --features selftest
+...
+selftest: start
+  try_lock: ok
+  data: ok
+  Send + Sync: ok
+  heap: ok
+selftest: OK
+ticks = 0
+ticks = 1
 ...
 ```
 
@@ -54,7 +71,7 @@ ticks = 2
 **Что ещё не сделано**:
 
 - Запуск на реальном железе (плата в наличии, отложено на этап 1/6). Перед этим: адреса GIC/UART из TRM/DTB, проверка `CurrentEL`, замена `board.rs`.
-- Синхронизация (этап 4), планировщик (этап 5).
+- Планировщик (этап 5).
 - Драйвер Ethernet, сетевой стек, логика файрвола, модульная система, DPI-модуль.
 
 ---
@@ -69,7 +86,7 @@ ticks = 2
 | **1** | Первый запуск на железе | `Hello from Rust` в UART через U-Boot + TFTP |
 | **2** | Управление памятью | MMU, таблицы страниц, аллокатор, `Box`/`Vec` |
 | **3** | Прерывания и исключения | Векторы, data abort, GICv3, ARM-таймер, `ticks` |
-| **4** | Синхронизация | `SpinLock`, `Mutex`, `critical_section` |
+| **4** | Синхронизация | `SpinLock`, UART/heap под блокировкой, selftest |
 | **5** | Планировщик | Задачи, переключение контекста, round-robin |
 | **6** | Драйвер Ethernet | TX/RX кадров через RTL8211F (нативный) |
 | **7** | ARP, IP, ICMP | `ping` с другого компьютера |
@@ -90,15 +107,19 @@ bare-metal-firewall/
 ├── src/
 │   ├── main.rs              # Точка входа в Rust, инициализация и smoke-тесты
 │   ├── start.s              # Ассемблерная точка входа _start (парковка ядер, bss)
-│   ├── uart.rs              # UART PL011-драйвер, fmt::Write, print!/println! (этап 0–1)
+│   ├── uart.rs              # UART PL011 под SpinLock, print!/println! (этап 0–1, 4)
 │   ├── mmu.rs               # MMU: L0–L2, identity map RAM/GIC/UART (этап 2–3)
-│   ├── heap.rs              # Bump-аллокатор, #[global_allocator] (этап 2)
+│   ├── heap.rs              # Bump под SpinLock, #[global_allocator] (этап 2, 4)
 │   ├── board.rs             # Адреса платы: RAM, GICD, GICR, UART (этап 3)
 │   ├── gic.rs               # GICv3: GICD/GICR, PPI, init/ack/eoi (этап 3)
 │   ├── timer.rs             # ARM Generic Timer CNTV, ticks (этап 3)
 │   ├── irq.rs               # VBAR, sync/IRQ dispatch (этап 3)
 │   ├── irq_vectors.s        # 16 векторов + IRQ trampoline (этап 3)
-│   ├── sync.rs              # Примитивы синхронизации (этап 4, план)
+│   ├── sync.rs              # SpinLock, guard, try_lock (этап 4)
+│   ├── selftest/
+│   │   ├── mod.rs           # запуск selftest по feature
+│   │   ├── test_sync.rs     # try_lock/data/Send+Sync
+│   │   └── test_heap.rs     # Box через GlobalAlloc
 │   ├── sched.rs             # Планировщик (этап 5)
 │   ├── net/
 │   │   ├── eth.rs           # Драйвер Ethernet (этап 6)
@@ -115,7 +136,7 @@ bare-metal-firewall/
 ├── doc/                     # База знаний (Obsidian): index.md — карта
 ├── AGENTS.md                # Правила работы агента-наставника
 ├── linker.ld                # Скрипт компоновки (база 0x42000000, стек, heap 1 МБ)
-├── Cargo.toml               # Манифест с panic = "abort"
+├── Cargo.toml               # Манифест: panic = "abort", feature selftest
 └── README.md
 ```
 
@@ -133,7 +154,8 @@ bare-metal-firewall/
 | Отладчик | `gdb-multiarch` | Пошаговая отладка, брейкпоинты |
 | Загрузчик | U-Boot | Уже прошит, загрузка по TFTP |
 | Сетевой стек | `smoltcp` (план) | Зрелый `no_std` TCP/IP стек на Rust |
-| Синхронизация | свой `SpinLock` (этап 4); сейчас UnsafeCell-инварианты | Паттерн уже применён в uart/heap (`unsafe impl Sync`) |
+| Синхронизация | свой `SpinLock` (этап 4) | UART/heap под блокировкой; `try_lock` в panic/exception |
+| Тестирование | selftest в QEMU (`--features selftest`) | `try_lock`, heap, panic path; host-тесты — опционально |
 
 ---
 
@@ -150,6 +172,10 @@ bare-metal-firewall/
 ### Почему `board.rs`, `gic.rs` и `timer.rs`
 
 Адреса платы (RAM, GICD, GICR, UART) собраны в `board.rs`; регистры и последовательность GICv3 — в `gic.rs`; `CNTV` и счётчик тиков — в `timer.rs`; `irq.rs` остаётся диспетчером. При переносе на RK3566 меняется `board.rs`, а не три файла. Решение зафиксировано в `doc/decisions/0005_board_gic_modules.md`.
+
+### Почему `SpinLock` и `try_print_args`
+
+UART и heap — общее состояние, поэтому они под `SpinLock`. `Bump` владеет `SpinLock<BumpState>`, поэтому `Bump: Sync` получается автоматически, без `unsafe impl Sync`. В `panic_handler` и `unexpected` используется `try_print_args`: паника может случиться, когда UART-lock уже удержан, и `lock()` завис бы навсегда. Heap-lock нельзя ждать в панике/ISR — аллокатор из этих контекстов не вызывается.
 
 ### Почему модульная система на трейтах
 
@@ -185,13 +211,35 @@ cargo run
 Hello from QEMU virt!
 ...
 MMU on!
-VBAR: 0x42005000
+VBAR: 0x42005800
 ticks = 0
 ticks = 1
 ...
 ```
 
 `ticks` печатаются примерно 4 раза в секунду; конкретный адрес `VBAR` зависит от сборки.
+
+### Self-test в QEMU
+
+```bash
+cargo run --features selftest
+```
+
+Ожидаемый вывод:
+
+```
+selftest: start
+  try_lock: ok
+  data: ok
+  Send + Sync: ok
+  heap: ok
+selftest: OK
+ticks = 0
+ticks = 1
+...
+```
+
+Self-test запускается до включения IRQ и проверяет `SpinLock`, `GlobalAlloc` и panic-path.
 
 ### Отладка через GDB
 
@@ -227,7 +275,7 @@ gdb-multiarch target/aarch64-unknown-none/debug/bare-metal-firewall
 - [ ] Этап 1 (железо): запуск на NanoPi R3S — *плата в наличии, отложено (адрес 0x42000000 и сценарий U-Boot готовы, см. doc/review/load_address.md)*
 - [x] Этап 2: MMU (identity map) и bump-аллокатор
 - [x] Этап 3 (QEMU): векторы, data abort, GICv3, ARM-таймер, `ticks` — *на железе не проверялся*
-- [ ] Этап 4: синхронизация
+- [x] Этап 4 (QEMU): `SpinLock`, UART/heap под блокировкой, selftest
 - [ ] Этап 5: планировщик
 - [ ] Этап 6: драйвер Ethernet
 - [ ] Этап 7: ARP/IP/ICMP

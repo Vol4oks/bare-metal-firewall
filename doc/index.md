@@ -62,4 +62,5 @@ tags: [moc]
 - [[stage3_precommit]] — pre-commit ревью этапа 3: аппаратные нюансы (ISB/RWP/ICFGR1/EOImode), clippy, гигиена коммита.
 - [[stage3_refactor_precommit]] — ревью рефакторинга board/gic/timer: тики работают, но board не подключён к mmu/uart, clippy identity_op.
 - [[stage4_sync_precommit]] — ревью `SpinLock`/selftest: тесты проходят, но обычная сборка даёт dead_code, UART/heap ещё не переведены.
+- [[stage4_sync_final]] — финальное ревью этапа 4: UART/heap под `SpinLock`, clippy чист; остался порядок `selftest: OK` до `heap: ok`.
 - *Запланировано: [[board_abstraction]].*
