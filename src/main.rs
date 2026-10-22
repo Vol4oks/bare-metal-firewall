@@ -11,6 +11,7 @@ mod gic;
 mod heap;
 mod irq;
 mod mmu;
+mod scheduler;
 mod sync;
 mod timer;
 mod uart;

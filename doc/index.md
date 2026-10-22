@@ -38,6 +38,8 @@ tags: [moc]
 - [[memory_barriers]] — `DSB`/`DMB`/`ISB`: порядок MMIO, зачем барьер после записи в GIC и при включении MMU.
 - [[spinlock]] — `SpinLock<T>`: `AtomicBool` + `UnsafeCell`, `Acquire`/`Release`, guard, IRQ-deadlock, `try_lock`.
 - [[no_std_testing]] — тестирование no_std: selftest в QEMU и host-тесты чистой логики с `std::thread`.
+- [[task_and_scheduler]] — модель задач, состояния, round-robin, idle, cooperative vs preemptive.
+- [[context_switch]] — сохранение контекста, cooperative `sched_switch`, preemptive IRQ-кадр.
 - *Появятся: critical_section, lock ordering.*
 
 ## Decisions
@@ -50,6 +52,8 @@ tags: [moc]
 ## Stages
 - [[stage3_interrupts]] — разбор этапа 3 по шагам: векторы, тест fault, GICv3, ARM-таймер, DoD.
 - [[stage4_sync]] — этап 4: `SpinLock`, UART/heap под блокировкой, `try_lock` в панике, `IrqSafeSpinLock`.
+- [[stage5_scheduler]] — этап 5: задачи, стеки, cooperative `yield`, preemptive таймер, idle.
+- [[stage5_tdd]] — тесты до реализации: policy на хосте, mechanism в QEMU, порядок TDD.
 
 ## Review
 - [[load_address]] — единая база 0x42000000 для QEMU и платы.
