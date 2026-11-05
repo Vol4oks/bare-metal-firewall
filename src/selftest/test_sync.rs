@@ -1,9 +1,17 @@
 use crate::sync::SpinLock;
 
 pub fn run() {
+    crate::println!("sync: start");
+
     try_lock_basics();
+    crate::println!("  try_lock: ok");
+
     lock_data();
+    crate::println!("  data: ok");
+
     compile_time_traits();
+    crate::println!("  Send + Sync: ok");
+
     crate::println!("sync: end");
 }
 
@@ -25,8 +33,6 @@ fn try_lock_basics() {
     for _ in 0..1000 {
         let _ = lock.lock();
     }
-
-    crate::println!("  try_lock: ok");
 }
 
 fn lock_data() {
@@ -34,12 +40,9 @@ fn lock_data() {
 
     *lock.lock() = 42;
     assert_eq!(*lock.lock(), 42);
-
-    crate::println!("  data: ok");
 }
 
 fn compile_time_traits() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<SpinLock<u32>>();
-    crate::println!("  Send + Sync: ok");
 }
