@@ -102,3 +102,5 @@ static mut STACK_B: Stack = Stack([0; 16 * 1024]);
 
 ## Связанные заметки
 - [[task_and_scheduler]], [[context_switch]], [[irq_entry_exit]], [[arm_generic_timer]], [[spinlock]], [[multicore_path]]
+- [[0006_data_plane_async]] — почему preemptive не идёт в путь пакета
+- [[latency_measurement]] — где брать таймстамп, если нужна точная метрика

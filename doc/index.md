@@ -12,12 +12,14 @@ tags: [moc]
 - [[linker_script]] — зачем нужен linker.ld: секции, счётчик адреса, контракт с start.s.
 - [[uboot_loading]] — как U-Boot грузит образ: go vs bootelf, роль адреса tftp.
 - [[asm_lsp_config]] — asm-lsp против компилятора: ложные ошибки x86-дефолта, фикс через .asm-lsp.toml.
+- [[cargo_aliases]] — сборка без глобального `[build] target`: `cargo fw/fwr/fwc/fwt`, host-тесты, `-T` через build.rs.
 
 ## Hardware
 - [[uart_pl011]] — регистры DR/FR, механика write_byte, volatile.
 - [[address_sources]] — база vs смещения, проверка через dumpdtb, путь к DTB.
 - [[gic_v3]] — GICv3: GICD/GICR/CPU-интерфейс, INTID, группы, приоритеты, ack/EOI.
 - [[arm_generic_timer]] — CNTV, CNTFRQ, level-triggered PPI 27, первый IRQ.
+- [[ethernet_queues_ptp]] — очереди GMAC/RTL8111H и аппаратные PTP-метки: что подтверждено, что нет, как проверять.
 *Появятся: memory map RK3566, Ethernet.*
 
 ## Concepts
@@ -40,6 +42,9 @@ tags: [moc]
 - [[no_std_testing]] — тестирование no_std: selftest в QEMU и host-тесты чистой логики с `std::thread`.
 - [[task_and_scheduler]] — модель задач, состояния, round-robin, idle, cooperative vs preemptive.
 - [[context_switch]] — сохранение контекста, cooperative `sched_switch`, preemptive IRQ-кадр.
+- [[latency_measurement]] — разрешение vs джиттер, где брать таймстамп (L0/L1/L2), polling vs IRQ, методика замера.
+- [[firmware_update_patterns]] — как обновляют прошивки в сетевых устройствах: single bank/A/B/golden, bootcount и откат, подпись, TR-069/ACS, ISSU.
+- [[multicore_path]] — одно ядро сейчас, per-core ресурсы, путь к SMP.
 - *Появятся: critical_section, lock ordering.*
 
 ## Decisions
@@ -48,12 +53,23 @@ tags: [moc]
 - [[0003_exceptions_first]] — ADR: этап 3 = векторы до GIC, чтобы падения печатались.
 - [[0004_baremetal_vs_linux]] — ADR: bare-metal vs готовая ОС — что отпадает, что появляется, почему выбран bare-metal.
 - [[0005_board_gic_modules]] — ADR: адреса в `board.rs`, драйвер GICv3 в `gic.rs`, `irq.rs` — диспетчер.
+- [[0006_data_plane_async]] — ADR (предложен): data plane run-to-completion, control plane — executor; таймстамп до очередей.
+- [[0007_core_partitioning]] — ADR: выделение ядер, per-core GIC/MMU/VBAR, PSCI, «IRQ-ядро» как антипаттерн.
+- [[0008_workspace_layout]] — ADR: разбиение на крейты по границе «политика/механизм/железо», host-тесты, грабли Cargo.
+- [[0009_hybrid_scheduling]] — ADR: гибридный планировщик — события NIC + дедлайны таймера, safe points, NAPI.
+- [[0010_management_http]] — ADR: веб-интерфейс и management plane: HTTP/JSON, аутентификация, изоляция от WAN.
+- [[0011_update_and_slots]] — ADR: обновление через U-Boot и браузер, A/B-слоты, откат, хранение конфига.
+- [[0012_protection_module_loading]] — ADR (предложен): как подключать новые алгоритмы защиты — конфиг/правила/VM/нативный блоб, таблица плюсов и минусов.
 
 ## Stages
 - [[stage3_interrupts]] — разбор этапа 3 по шагам: векторы, тест fault, GICv3, ARM-таймер, DoD.
 - [[stage4_sync]] — этап 4: `SpinLock`, UART/heap под блокировкой, `try_lock` в панике, `IrqSafeSpinLock`.
 - [[stage5_scheduler]] — этап 5: задачи, стеки, cooperative `yield`, preemptive таймер, idle.
 - [[stage5_tdd]] — тесты до реализации: policy на хосте, mechanism в QEMU, порядок TDD.
+- [[stage5_policy_skeleton]] — шаг 0.1: TCB, состояния, приоритеты, `pending`/`wait_mask`, selftest без asm.
+- [[stage5_policy_testing]] — тестирование 0.1: compile-time asserts, матрица состояний, сценарии, randomized-прогон, перенос на host.
+- [[stage5_0_2_switch]] — шаг 0.2: контекст новой задачи, статические стеки, `sched_switch`/`sched_start`, проводка в `main`.
+- [[roadmap_5_12]] — план 5→12 по принятым вариантам 1A/2B/3B/4A: этапы, крейты, тесты, контрольные точки.
 
 ## Review
 - [[load_address]] — единая база 0x42000000 для QEMU и платы.

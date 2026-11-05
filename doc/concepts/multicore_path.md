@@ -39,3 +39,4 @@ stage: 1
 
 ## Связанные заметки
 - [[entry_hygiene]], [[boot_flow]], [[qemu_adaptation]]
+- [[0007_core_partitioning]] — что значит выделить ядро и почему «IRQ-ядро» — антипаттерн
