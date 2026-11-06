@@ -16,6 +16,8 @@ stage: 5
 3. asm: `sched_switch` (сохранить/загрузить контекст) и `sched_start` (первый прыжок).
 4. Под feature `schedtest` — две задачи `A`/`B`, `main` вызывает `start()`.
 
+Устройство тестового модуля (стеки, задачи, монитор, чекпоинты) — [[stage5_schedtest]].
+
 ## Контекст новой задачи
 
 В `spawn` после создания `Task`:
@@ -37,8 +39,8 @@ const STACK_SIZE: usize = 16 * 1024;
 #[repr(align(16))]
 struct Stack([u8; STACK_SIZE]);
 
-static mut STACK_A: Stack = Stack([0xA5; STACK_SIZE]);
-static mut STACK_B: Stack = Stack([0xA5; STACK_SIZE]);
+static mut STACK_A: Stack = Stack([0; STACK_SIZE]);
+static mut STACK_B: Stack = Stack([0; STACK_SIZE]);
 
 fn stack_top(stack: *mut Stack) -> usize {
     stack as usize + core::mem::size_of::<Stack>()
@@ -52,7 +54,20 @@ let top_a = stack_top(core::ptr::addr_of_mut!(STACK_A));
 >
 > Почему не `static STACK_A: Stack`: CPU будет писать в эту память через `sp`. Запись через указатель, полученный из разделяемой (не `UnsafeCell`) статики, нарушает модель алиасинга Rust. `static mut` + сырой указатель — корректный путь.
 
-Канарейка: стек растёт вниз, поэтому рискованная зона — **нижние** адреса. Заполняем стек `0xA5` и после прогона проверяем первые байты через сырой указатель. Guard page нет: переполнение молча затрёт соседние статические данные, канарейка это только обнаружит.
+Канарейка: стек растёт вниз, поэтому рискованная зона — **нижние** адреса. Нулевой массив попадает в `.bss` и не увеличивает размер образа (`.bss` и так обнуляется в `start.s`), а магическое число записываем в основание стека **в рантайме**:
+
+```rust
+fn stack_top(stack: *mut Stack) -> usize {
+    const CANARY: u64 = 0xDEAD_BEEF_0001_0001;
+    unsafe { (stack as *mut u64).write_volatile(CANARY) };
+    stack as usize + core::mem::size_of::<Stack>()
+}
+```
+
+> [!warning] Не инициализируйте стек как `[0xA5; N]`
+> Ненулевой паттерн превращает массив в `.data` и добавляет 16 КиБ на каждый стек прямо в образ. Проверка «нижние байты всё ещё нули» работает и без этого, а настоящую канарейку лучше писать в рантайме.
+
+Guard page нет: переполнение молча затрёт соседние статические данные, канарейка это только обнаружит (и то если переполнение дойдёт до низа).
 
 ## Asm
 
@@ -138,12 +153,112 @@ static mut SCHED: Scheduler = Scheduler::new();
 
 В 0.2 IRQ-обработчик планировщик не трогает (таймер только инкрементит `ticks`), поэтому блокировка не нужна. В 0.4, когда ISR начнёт ставить события, доступ станет `IrqSafeSpinLock` или атомарные маски — это отдельное решение.
 
+Свободные функции-обёртки (они и будут API для задач):
+
+```rust
+pub fn yield_now() {
+    let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+
+    let from = match sched.current() { Some(id) => id, None => return };
+    let next = match sched.yield_current() { Some(id) => id, None => return };
+    if next == from {
+        return; // переключать нечего
+    }
+
+    let base = sched.tasks.as_mut_ptr();
+    let from_ctx = unsafe { core::ptr::addr_of_mut!((*base.add(from)).ctx) };
+    let to_ctx = unsafe { core::ptr::addr_of!((*base.add(next)).ctx) };
+    unsafe { sched_switch(from_ctx, to_ctx) };
+}
+
+pub fn exit() -> ! {
+    let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+    let base = sched.tasks.as_mut_ptr();
+
+    match sched.exit_current() {
+        Some(next) => {
+            let ctx = unsafe { core::ptr::addr_of!((*base.add(next)).ctx) };
+            unsafe { sched_start(ctx) }
+        }
+        None => loop {
+            unsafe { core::arch::asm!("wfi") };
+        },
+    }
+}
+
+pub fn run() -> ! {
+    let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+    let base = sched.tasks.as_mut_ptr();
+
+    let first = match sched.start() {
+        Some(id) => id,
+        None => loop {
+            unsafe { core::arch::asm!("wfi") };
+        },
+    };
+
+    let ctx = unsafe { core::ptr::addr_of!((*base.add(first)).ctx) };
+    unsafe { sched_start(ctx) }
+}
+```
+
+`yield_now` — единственный путь с сохранением контекста; `exit`/`run` используют `sched_start` и не возвращаются.
+
+> [!warning] IRQ внутри `sched_switch`
+> Прерывания включены, и таймер может сработать между сохранением `sp` и его загрузкой. Это безопасно, пока ISR **не трогает планировщик**: кадр прерывания ляжет на текущий стек и будет снят до продолжения asm. В 0.4, когда ISR начнёт ставить события, порядок станет частью контракта (маска или атомики).
+
 ## Проводка в `main`
 
 - feature `schedtest` (по аналогии с `selftest`), чтобы обычный `cargo run` не менялся.
 - Спавним две задачи с реальными стеками, вызываем `sched::start()`, `main` не возвращается.
 - IRQ можно оставить включёнными: тик продолжает тикать, печать тиков уедет в idle/CP-задачу на 0.3.
 - `println!` берёт UART-lock внутри макроса и отпускает до возврата; `yield_now()` не должен вызываться с удерживаемым guard'ом.
+- Модуль `scheduler` нужен только при `selftest`/`schedtest`. Если оставить его безусловным, в обычной сборке вернутся предупреждения `dead_code`. Варианты: `#[cfg(any(feature = "selftest", feature = "schedtest"))] mod scheduler;` либо оставить модульный `allow(dead_code)` до 0.3, когда планировщик станет основным циклом. Второй вариант честнее — тогда и снимать allow нужно на 0.3, а не на 0.2.
+
+## Почему `schedtest` — отдельная feature
+
+Не «по аналогии с `selftest`», а потому что это другой тип проверки.
+
+| | `selftest` | `schedtest` |
+|---|---|---|
+| Что проверяет | policy и утилиты: `SpinLock`, heap, состояния планировщика | механизм: asm, стеки, переключение контекста |
+| Возвращает управление | да (`selftest: end`, дальше тики) | нет (`-> !`, забирает CPU) |
+| Момент запуска | до `gic::init`/`daifclr` | вместо основного цикла, уже с IRQ |
+| Стоимость в образе | почти нулевая | 2×16 КиБ стеков + asm |
+| Цена ошибки | паника в selftest | fault/triple fault в середине переключения |
+
+Три конкретные причины:
+
+1. **`selftest::run()` обязан вернуться**, иначе `main` не дойдёт до инициализации GIC/таймера. Встроенный `schedtest` сделал бы всё после него недостижимым, и пришлось бы прятать `selftest: end` и тики за `cfg`.
+2. **`--features selftest` должен оставаться проверкой только логики.** Если сломается asm, вы всё равно увидите зелёные `sched: … ok` и поймёте, что policy цела. При объединении падение механизма маскирует результаты policy.
+3. **Разные предусловия.** Selftest идёт до инициализации GIC/таймера и не должен от них зависеть; `schedtest` живёт там, где был главный цикл, с включёнными IRQ.
+
+Альтернатива — отдельный `[[bin]]` (второй образ) — станет дешёвой только в workspace, когда `_start`, panic-handler и линковка вынесутся в общий крейт. Сейчас фича дешевле: один бинарник, один линкер-скрипт.
+
+```bash
+cargo run                                   # обычный цикл тиков
+cargo run --features selftest               # policy, затем тики
+cargo run --features schedtest              # планировщик вместо тиков
+cargo run --features "selftest schedtest"   # policy, затем планировщик
+```
+
+Цена — четыре конфигурации сборки вместо двух. На практике проверяются три: последняя — композиция, и она же ловит ошибку порядка.
+
+> [!warning] Порядок при обеих фичах
+> `selftest` обязан идти раньше `schedtest`: второй не возвращается. Порядок в `main` должен быть явным (отдельные `cfg`-блоки), а не зависеть от порядка вызовов в тексте.
+
+## Отладка
+
+| Симптом | Вероятная причина |
+|---|---|
+| Видно только `A` | `yield_now` не переключает: `sp` не сохранён/не загружен, либо `next == from` |
+| Один `A`, затем тишина | `ret` в ноль: забыт `x30 = entry` |
+| `A B`, затем мусор | не выровнен `sp` или стек мал |
+| `A B A` с испорченными локальными | не восстановлены `x19`–`x29` |
+| `PANIC: … not aligned` | `stack_top % 16 != 0` |
+| Стек «протёк» в соседние статические | переполнение; канарейка внизу, guard page нет |
+
+GDB: `break sched_switch`, затем `info registers sp x30` и `x/13gx $x0` — сравнить контекст до и после. Брейкпоинт на `task_b` подтверждает, что первый `ret` ушёл в `entry`.
 
 ## DoD
 

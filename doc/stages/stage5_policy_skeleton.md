@@ -548,7 +548,7 @@ pub fn block_current(&mut self, mask: EventSet) -> BlockResult {
 - [x] `cargo clippy --bin bare-metal-firewall --features selftest` чист;
 - [x] `cargo fmt --check` чист;
 - [x] нет `todo!()`/`unimplemented!()`;
-- [x] `#![allow(dead_code)]` в `scheduler.rs` помечен `TODO(0.2)` — снять на следующем шаге.
+- [x] `#![allow(dead_code)]` в `scheduler.rs` помечен `TODO(0.2)`; при feature-гейте снимается на 0.3, когда планировщик станет безусловным ([[stage5_0_2_switch]]).
 
 ## Подводные камни
 

@@ -42,6 +42,7 @@ tags: [moc]
 - [[no_std_testing]] — тестирование no_std: selftest в QEMU и host-тесты чистой логики с `std::thread`.
 - [[task_and_scheduler]] — модель задач, состояния, round-robin, idle, cooperative vs preemptive.
 - [[context_switch]] — сохранение контекста, cooperative `sched_switch`, preemptive IRQ-кадр.
+- [[fp_simd_in_kernel]] — `CPACR_EL1.FPEN`, trap `EC=0x7`, почему компилятор всё равно использует NEON и что сохранять в контексте.
 - [[latency_measurement]] — разрешение vs джиттер, где брать таймстамп (L0/L1/L2), polling vs IRQ, методика замера.
 - [[firmware_update_patterns]] — как обновляют прошивки в сетевых устройствах: single bank/A/B/golden, bootcount и откат, подпись, TR-069/ACS, ISSU.
 - [[multicore_path]] — одно ядро сейчас, per-core ресурсы, путь к SMP.
@@ -69,6 +70,7 @@ tags: [moc]
 - [[stage5_policy_skeleton]] — шаг 0.1: TCB, состояния, приоритеты, `pending`/`wait_mask`, selftest без asm.
 - [[stage5_policy_testing]] — тестирование 0.1: compile-time asserts, матрица состояний, сценарии, randomized-прогон, перенос на host.
 - [[stage5_0_2_switch]] — шаг 0.2: контекст новой задачи, статические стеки, `sched_switch`/`sched_start`, проводка в `main`.
+- [[stage5_schedtest]] — организация `schedtest`: стеки и канарейки, задачи, монитор, контракт вывода, чекпоинты.
 - [[roadmap_5_12]] — план 5→12 по принятым вариантам 1A/2B/3B/4A: этапы, крейты, тесты, контрольные точки.
 
 ## Review
@@ -83,4 +85,6 @@ tags: [moc]
 - [[stage3_refactor_precommit]] — ревью рефакторинга board/gic/timer: тики работают, но board не подключён к mmu/uart, clippy identity_op.
 - [[stage4_sync_precommit]] — ревью `SpinLock`/selftest: тесты проходят, но обычная сборка даёт dead_code, UART/heap ещё не переведены.
 - [[stage4_sync_final]] — финальное ревью этапа 4: UART/heap под `SpinLock`, clippy чист; остался порядок `selftest: OK` до `heap: ok`.
+- [[stage5_schedtest_review]] — ревью `schedtest` (0.2 в работе): структура верна, 23 ошибки сборки, `default`-фичи ломают обычный запуск.
+- [[stage5_0_2_precommit]] — pre-commit 0.2: все режимы работают, негативный тест ловит отсутствие переключений; блокер — clippy.
 - *Запланировано: [[board_abstraction]].*
