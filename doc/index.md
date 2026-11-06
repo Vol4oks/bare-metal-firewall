@@ -71,6 +71,7 @@ tags: [moc]
 - [[stage5_policy_testing]] — тестирование 0.1: compile-time asserts, матрица состояний, сценарии, randomized-прогон, перенос на host.
 - [[stage5_0_2_switch]] — шаг 0.2: контекст новой задачи, статические стеки, `sched_switch`/`sched_start`, проводка в `main`.
 - [[stage5_schedtest]] — организация `schedtest`: стеки и канарейки, задачи, монитор, контракт вывода, чекпоинты.
+- [[stage5_0_3_idle]] — шаг 0.3: idle как задача, планировщик как основной цикл, `exit → idle`, тики из idle.
 - [[roadmap_5_12]] — план 5→12 по принятым вариантам 1A/2B/3B/4A: этапы, крейты, тесты, контрольные точки.
 
 ## Review
@@ -87,4 +88,5 @@ tags: [moc]
 - [[stage4_sync_final]] — финальное ревью этапа 4: UART/heap под `SpinLock`, clippy чист; остался порядок `selftest: OK` до `heap: ok`.
 - [[stage5_schedtest_review]] — ревью `schedtest` (0.2 в работе): структура верна, 23 ошибки сборки, `default`-фичи ломают обычный запуск.
 - [[stage5_0_2_precommit]] — pre-commit 0.2: все режимы работают, негативный тест ловит отсутствие переключений; блокер — clippy.
+- [[stage5_0_3_review]] — ревью 0.3: работает, но clippy красный (`unreachable statement`, `Stack.0`), пропала `schedtest: start`, нет негативного теста idle.
 - *Запланировано: [[board_abstraction]].*
