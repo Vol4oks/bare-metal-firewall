@@ -16,6 +16,8 @@ mod sync;
 mod timer;
 mod uart;
 
+#[cfg(feature = "schedtest")]
+mod schedtest;
 #[cfg(feature = "selftest")]
 mod selftest;
 
@@ -61,6 +63,13 @@ pub extern "C" fn main() -> ! {
         timer::init();
         core::arch::asm!("msr daifclr, #2", "isb");
     }
+    #[cfg(feature = "schedtest")]
+    {
+        crate::println!("schedtest: start");
+        schedtest::run();
+    }
+
+    #[cfg(not(feature = "schedtest"))]
     loop {
         println!("ticks = {}", timer::ticks());
         unsafe { core::arch::asm!("wfi") };

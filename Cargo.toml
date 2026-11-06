@@ -9,6 +9,8 @@ panic = "abort"
 panic = "abort"
 
 [features]
+default = []
 selftest = []
+schedtest = []
 
 [dependencies]

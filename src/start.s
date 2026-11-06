@@ -13,11 +13,18 @@ _start:
     ldr x0, =stack_top
     mov sp, x0
 
+    //Включить FP/SIM
+    mrs x0, cpacr_el1
+    orr x0, x0, #(3 << 20)   // FPEN = 0b11
+    msr cpacr_el1, x0
+    isb
+
     // 2. Обнуление .bss (размер кратен 16 — гарантирует ALIGN в linker.ld)
     ldr x0, =__bss_start
     ldr x1, =__bss_end
     cmp x0, x1
     b.hs 2f
+
 1:
     stp xzr, xzr, [x0], #16
     cmp x0, x1

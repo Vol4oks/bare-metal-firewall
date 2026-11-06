@@ -2,8 +2,77 @@
 //!
 //! Здесь данные и правила «кто следующий». Переключение контекста — 0.2,
 //! атомарные события и IRQ — 0.4.
+#![allow(dead_code)] // TODO(0.3): снять, когда планировщик станет основным циклом
+use core::arch::global_asm;
 
-#![allow(dead_code)] // TODO(0.2): снять, когда spawn/start начнут вызываться из main.
+global_asm!(include_str!("sched_switch.s"));
+
+unsafe extern "C" {
+    fn sched_switch(from: *mut TaskContext, to: *const TaskContext);
+    fn sched_start(to: *const TaskContext) -> !;
+}
+
+static mut SCHED: Scheduler = Scheduler::new();
+
+pub fn spawn(
+    entry: extern "C" fn() -> !,
+    name: &'static str,
+    prio: Prio,
+    stack_top: usize,
+) -> Option<usize> {
+    unsafe { (*core::ptr::addr_of_mut!(SCHED)).spawn(entry, name, prio, stack_top) }
+}
+
+pub fn yield_now() {
+    let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+
+    let from = match sched.current() {
+        Some(id) => id,
+        None => return,
+    };
+    let next = match sched.yield_current() {
+        Some(id) => id,
+        None => return,
+    };
+    if next == from {
+        return; // переключать нечего
+    }
+
+    let base = sched.tasks.as_mut_ptr();
+    let from_ctx = unsafe { core::ptr::addr_of_mut!((*base.add(from)).ctx) };
+    let to_ctx = unsafe { core::ptr::addr_of!((*base.add(next)).ctx) };
+    unsafe { sched_switch(from_ctx, to_ctx) };
+}
+
+pub fn exit() -> ! {
+    let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+    let base = sched.tasks.as_mut_ptr();
+
+    match sched.exit_current() {
+        Some(next) => {
+            let ctx = unsafe { core::ptr::addr_of!((*base.add(next)).ctx) };
+            unsafe { sched_start(ctx) }
+        }
+        None => loop {
+            unsafe { core::arch::asm!("wfi") };
+        },
+    }
+}
+
+pub fn run() -> ! {
+    let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+    let base = sched.tasks.as_mut_ptr();
+
+    let first = match sched.start() {
+        Some(id) => id,
+        None => loop {
+            unsafe { core::arch::asm!("wfi") };
+        },
+    };
+
+    let ctx = unsafe { core::ptr::addr_of!((*base.add(first)).ctx) };
+    unsafe { sched_start(ctx) }
+}
 
 pub const MAX_TASKS: usize = 8;
 
@@ -36,7 +105,7 @@ pub enum TaskState {
     Exited,
 }
 
-/// Раскладка для `sched_switch`. Asm появится в 0.2, но смещения фиксируем сейчас.
+/// Раскладка для `sched_switch`.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct TaskContext {
@@ -53,10 +122,22 @@ pub struct TaskContext {
     pub x29: u64,
     pub x30: u64,
     pub sp: u64,
+
+    // callee-saved SIMD (AAPCS64: v8–v15)
+    pub q8: u128,
+    pub q9: u128,
+    pub q10: u128,
+    pub q11: u128,
+    pub q12: u128,
+    pub q13: u128,
+    pub q14: u128,
+    pub q15: u128,
 }
 
 const _: () = assert!(core::mem::offset_of!(TaskContext, sp) == 96);
-const _: () = assert!(core::mem::size_of::<TaskContext>() == 104);
+const _: () = assert!(core::mem::offset_of!(TaskContext, q8) == 112);
+const _: () = assert!(core::mem::offset_of!(TaskContext, q15) == 224);
+const _: () = assert!(core::mem::size_of::<TaskContext>() == 240);
 
 pub struct Task {
     pub ctx: TaskContext,
@@ -85,6 +166,14 @@ impl Task {
             x29: 0,
             x30: 0,
             sp: 0,
+            q8: 0,
+            q9: 0,
+            q10: 0,
+            q11: 0,
+            q12: 0,
+            q13: 0,
+            q14: 0,
+            q15: 0,
         },
         state: TaskState::Unused,
         prio: Prio::IDLE,
@@ -135,8 +224,14 @@ impl Scheduler {
             .iter()
             .position(|task| task.state == TaskState::Unused)?;
 
+        let ctx = TaskContext {
+            sp: stack_top as u64,
+            x30: entry as usize as u64,
+            ..Default::default()
+        };
+
         self.tasks[id] = Task {
-            ctx: TaskContext::default(),
+            ctx,
             state: TaskState::Ready,
             prio,
             wait_mask: 0,
