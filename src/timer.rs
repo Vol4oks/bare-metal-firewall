@@ -65,7 +65,6 @@ pub unsafe fn on_irq() {
     TICKS.fetch_add(1, Ordering::Relaxed);
 }
 
-#[allow(dead_code)] // используется циклом тиков, выключенным при feature schedtest
 pub fn ticks() -> u32 {
     TICKS.load(Ordering::Relaxed)
 }

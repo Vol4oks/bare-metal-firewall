@@ -109,7 +109,8 @@ extern "C" fn monitor() -> ! {
     scheduler::exit()
 }
 
-pub fn run() -> ! {
+pub fn spawn_tasks() {
+    crate::println!("schedtest: star");
     let top_a = init_stack(core::ptr::addr_of_mut!(STACK_A));
     let top_b = init_stack(core::ptr::addr_of_mut!(STACK_B));
     let top_m = init_stack(core::ptr::addr_of_mut!(STACK_MON));
@@ -117,6 +118,4 @@ pub fn run() -> ! {
     scheduler::spawn(task_a, "a", scheduler::Prio::CP, top_a).expect("slot a");
     scheduler::spawn(task_b, "b", scheduler::Prio::CP, top_b).expect("slot b");
     scheduler::spawn(monitor, "mon", scheduler::Prio::CP, top_m).expect("slot mon");
-
-    scheduler::run()
 }

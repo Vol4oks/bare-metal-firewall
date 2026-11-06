@@ -9,6 +9,7 @@ use core::panic::PanicInfo;
 mod board;
 mod gic;
 mod heap;
+mod idle;
 mod irq;
 mod mmu;
 mod scheduler;
@@ -63,17 +64,13 @@ pub extern "C" fn main() -> ! {
         timer::init();
         core::arch::asm!("msr daifclr, #2", "isb");
     }
-    #[cfg(feature = "schedtest")]
-    {
-        crate::println!("schedtest: start");
-        schedtest::run();
-    }
+    let boot_stack_top = &raw const stack_top as usize;
+    scheduler::spawn(idle::task, "idle", scheduler::Prio::IDLE, boot_stack_top).expect("idle slot");
 
-    #[cfg(not(feature = "schedtest"))]
-    loop {
-        println!("ticks = {}", timer::ticks());
-        unsafe { core::arch::asm!("wfi") };
-    } // Бесконечный цикл
+    #[cfg(feature = "schedtest")]
+    schedtest::spawn_tasks();
+
+    scheduler::run();
 }
 
 // Обязательный обработчик паники для no_std
