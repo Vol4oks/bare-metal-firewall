@@ -14,6 +14,9 @@ tags: [moc]
 - [[asm_lsp_config]] — asm-lsp против компилятора: ложные ошибки x86-дефолта, фикс через .asm-lsp.toml.
 - [[cargo_aliases]] — сборка без глобального `[build] target`: `cargo fw/fwr/fwc/fwt`, host-тесты, `-T` через build.rs.
 - [[justfile]] — `just check/smoke/ci`: линт во всех конфигурациях, QEMU-прогоны с проверкой маркеров, прямой запуск с `-serial file:`.
+- [[serial_console]] — USB-UART CH340: 3.3 В, 1500000 8N1, picocom/лог, разбор «мусор vs тишина».
+- [[sd_card_image]] — вендорский образ на SD: запись, первый запуск, сбор фактов из U-Boot и Linux.
+- [[board_scripts]] — цикл на плате: сборка `probe/`, `objcopy`, TFTP-сервер, `go`, рецепты justfile.
 
 ## Hardware
 - [[uart_pl011]] — регистры DR/FR, механика write_byte, volatile.
@@ -21,7 +24,10 @@ tags: [moc]
 - [[gic_v3]] — GICv3: GICD/GICR/CPU-интерфейс, INTID, группы, приоритеты, ack/EOI.
 - [[arm_generic_timer]] — CNTV, CNTFRQ, level-triggered PPI 27, первый IRQ.
 - [[ethernet_queues_ptp]] — очереди GMAC/RTL8111H и аппаратные PTP-метки: что подтверждено, что нет, как проверять.
-*Появятся: memory map RK3566, Ethernet.*
+- [[board_bringup]] — bring-up NanoPi R3S: адрес загрузки, EL2→EL1, UART DW16550, GIC, MMU, план H0–H7.
+- [[h0_fact_sheet]] — H0: какие факты о плате нужны, какой командой добываются и что меняют в коде.
+- [[rk3566_bootrom_media]] — почему без eMMC/SD консоль молчит: BootROM, носители, Maskrom.
+- [[memory_map_rk3566]] — подтверждённая карта платы: RAM с `0x0`, `kernel_addr_r`, UART2, GMAC, MMC.
 
 ## Concepts
 - [[boot_flow]] — путь от включения до main: роль start.s и linker.ld.
@@ -64,6 +70,8 @@ tags: [moc]
 - [[0012_protection_module_loading]] — ADR (предложен): как подключать новые алгоритмы защиты — конфиг/правила/VM/нативный блоб, таблица плюсов и минусов.
 
 ## Stages
+- [[workspace_migration]] — переезд в workspace: 1.1/1.2, гейт CT2, `fw-sync`, где какие тесты.
+- [[h2_minimal_image]] — этап 1, H2: минимальный образ (EL2→EL1, маркеры `E2H1G`), сборка `probe/`, TFTP.
 - [[stage3_interrupts]] — разбор этапа 3 по шагам: векторы, тест fault, GICv3, ARM-таймер, DoD.
 - [[stage4_sync]] — этап 4: `SpinLock`, UART/heap под блокировкой, `try_lock` в панике, `IrqSafeSpinLock`.
 - [[stage5_scheduler]] — этап 5: задачи, стеки, cooperative `yield`, preemptive таймер, idle.
