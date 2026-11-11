@@ -1,9 +1,8 @@
-use crate::{println, scheduler, timer};
+use crate::scheduler;
 
 pub extern "C" fn task() -> ! {
     loop {
+        scheduler::yield_now(); // drain до сна
         unsafe { core::arch::asm!("wfi") };
-        println!("ticks = {}", timer::ticks());
-        scheduler::yield_now(); // задел на 0.4: отдать CPU, если кто-то стал Ready
     }
 }

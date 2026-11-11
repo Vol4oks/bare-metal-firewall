@@ -210,8 +210,8 @@ Hello from QEMU virt!
 ...
 MMU on!
 VBAR: 0x42005800
-ticks = 0
-ticks = 1
+ticks = 1 (+1)
+ticks = 2 (+1)
 ...
 ```
 

@@ -7,6 +7,7 @@ use core::arch::global_asm;
 use core::panic::PanicInfo;
 
 mod board;
+mod events;
 mod gic;
 mod heap;
 mod idle;
@@ -14,6 +15,7 @@ mod irq;
 mod mmu;
 mod scheduler;
 mod sync;
+mod ticker;
 mod timer;
 mod uart;
 
@@ -62,14 +64,23 @@ pub extern "C" fn main() -> ! {
         gic::GIC.init();
         gic::GIC.enable_ppi(timer::INTID, timer::PRIORITY);
         timer::init();
-        core::arch::asm!("msr daifclr, #2", "isb");
     }
     let boot_stack_top = &raw const stack_top as usize;
     scheduler::spawn(idle::task, "idle", scheduler::Prio::IDLE, boot_stack_top).expect("idle slot");
 
+    let tick = scheduler::spawn(
+        ticker::task,
+        "tick",
+        scheduler::Prio::CP,
+        ticker::stack_top(),
+    )
+    .expect("tick slot");
+    scheduler::set_waker(events::TICK, tick);
+
     #[cfg(feature = "schedtest")]
     schedtest::spawn_tasks();
 
+    unsafe { core::arch::asm!("msr daifclr, #2", "isb") };
     scheduler::run();
 }
 

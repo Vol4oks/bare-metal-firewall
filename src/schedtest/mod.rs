@@ -110,7 +110,7 @@ extern "C" fn monitor() -> ! {
 }
 
 pub fn spawn_tasks() {
-    crate::println!("schedtest: star");
+    crate::println!("schedtest: start");
     let top_a = init_stack(core::ptr::addr_of_mut!(STACK_A));
     let top_b = init_stack(core::ptr::addr_of_mut!(STACK_B));
     let top_m = init_stack(core::ptr::addr_of_mut!(STACK_MON));

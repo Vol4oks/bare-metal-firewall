@@ -1,4 +1,6 @@
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+
+use crate::{events, scheduler};
 
 /// INTID виртуального таймера: PPI 27
 pub const INTID: u32 = 27;
@@ -12,7 +14,7 @@ const HZ: u64 = 4;
 static TVAL: AtomicU32 = AtomicU32::new(0);
 
 // Счётчик срабатываний для main.
-static TICKS: AtomicU32 = AtomicU32::new(0);
+static TICKS: AtomicU64 = AtomicU64::new(0);
 
 fn cntfrq() -> u64 {
     let v;
@@ -54,6 +56,8 @@ pub unsafe fn init() {
 ///
 /// Только из IRQ-контекста, после `init()`.
 pub unsafe fn on_irq() {
+    TICKS.fetch_add(1, Ordering::Release);
+    scheduler::wake_from_event(events::TICK);
     let tval = TVAL.load(Ordering::Relaxed);
     unsafe {
         core::arch::asm!(
@@ -62,9 +66,8 @@ pub unsafe fn on_irq() {
             t = in(reg) tval as u64,
         );
     }
-    TICKS.fetch_add(1, Ordering::Relaxed);
 }
 
-pub fn ticks() -> u32 {
-    TICKS.load(Ordering::Relaxed)
+pub fn ticks() -> u64 {
+    TICKS.load(Ordering::Acquire)
 }

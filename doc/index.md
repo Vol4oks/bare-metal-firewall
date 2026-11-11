@@ -13,6 +13,7 @@ tags: [moc]
 - [[uboot_loading]] — как U-Boot грузит образ: go vs bootelf, роль адреса tftp.
 - [[asm_lsp_config]] — asm-lsp против компилятора: ложные ошибки x86-дефолта, фикс через .asm-lsp.toml.
 - [[cargo_aliases]] — сборка без глобального `[build] target`: `cargo fw/fwr/fwc/fwt`, host-тесты, `-T` через build.rs.
+- [[justfile]] — `just check/smoke/ci`: линт во всех конфигурациях, QEMU-прогоны с проверкой маркеров, прямой запуск с `-serial file:`.
 
 ## Hardware
 - [[uart_pl011]] — регистры DR/FR, механика write_byte, volatile.
@@ -72,6 +73,7 @@ tags: [moc]
 - [[stage5_0_2_switch]] — шаг 0.2: контекст новой задачи, статические стеки, `sched_switch`/`sched_start`, проводка в `main`.
 - [[stage5_schedtest]] — организация `schedtest`: стеки и канарейки, задачи, монитор, контракт вывода, чекпоинты.
 - [[stage5_0_3_idle]] — шаг 0.3: idle как задача, планировщик как основной цикл, `exit → idle`, тики из idle.
+- [[stage5_0_4_events]] — шаг 0.4: `PENDING`/`READY`, реестр `WAKERS`, `wake_from_isr`, drain, `wait_current`, счётчик тиков.
 - [[roadmap_5_12]] — план 5→12 по принятым вариантам 1A/2B/3B/4A: этапы, крейты, тесты, контрольные точки.
 
 ## Review
@@ -89,4 +91,5 @@ tags: [moc]
 - [[stage5_schedtest_review]] — ревью `schedtest` (0.2 в работе): структура верна, 23 ошибки сборки, `default`-фичи ломают обычный запуск.
 - [[stage5_0_2_precommit]] — pre-commit 0.2: все режимы работают, негативный тест ловит отсутствие переключений; блокер — clippy.
 - [[stage5_0_3_review]] — ревью 0.3: работает, но clippy красный (`unreachable statement`, `Stack.0`), пропала `schedtest: start`, нет негативного теста idle.
+- [[stage5_0_4_review]] — ревью 0.4: тики идут `(+1)`; блокер — `Stack.0` в `ticker.rs`, опечатка в `schedtest: star`, не прогнаны негативные сценарии.
 - *Запланировано: [[board_abstraction]].*

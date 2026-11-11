@@ -1,7 +1,15 @@
-//! Здесь данные и правила «кто следующий». Переключение контекста — 0.2,
-//! атомарные события и IRQ — 0.4.
-#![allow(dead_code)] // TODO(0.4): снять, когда планировщик станет основным циклом
-use core::arch::global_asm;
+//! Планировщик: policy (0.1), cooperative switch (0.2), события (0.4).
+//!
+//! ISR трогает только атомики `PENDING`/`READY`; `drain_irq` переносит их
+//! в policy на safe point (`yield_now`, `wait_current`). Вытеснение и
+//! дедлайны — отдельные шаги.
+#![allow(dead_code)] // TODO(этап 6): Prio::new/get, Task.name, assert_invariants
+use core::{
+    arch::global_asm,
+    sync::atomic::{AtomicU32, Ordering},
+};
+
+use crate::events::{self, EventSet};
 
 global_asm!(include_str!("sched_switch.s"));
 
@@ -23,6 +31,7 @@ pub fn spawn(
 
 pub fn yield_now() {
     let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+    sched.drain_irq();
 
     let from = match sched.current() {
         Some(id) => id,
@@ -72,9 +81,43 @@ pub fn run() -> ! {
     unsafe { sched_start(ctx) }
 }
 
-pub const MAX_TASKS: usize = 8;
+fn switch_between(from: usize, to: usize) {
+    let (from_ctx, to_ctx) = {
+        let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+        let base = sched.tasks.as_mut_ptr();
+        (
+            unsafe { core::ptr::addr_of_mut!((*base.add(from)).ctx) },
+            unsafe { core::ptr::addr_of!((*base.add(to)).ctx) },
+        )
+    };
+    unsafe { sched_switch(from_ctx, to_ctx) };
+}
 
-pub type EventSet = u32;
+pub fn wait_current(mask: EventSet) -> EventSet {
+    loop {
+        let (me, next) = {
+            let sched = unsafe { &mut *core::ptr::addr_of_mut!(SCHED) };
+            sched.drain_irq();
+            if let Some(ev) = sched.try_wait_current(mask) {
+                return ev;
+            }
+
+            let me = sched.current().expect("wait without current");
+            match sched.block_current(mask) {
+                BlockResult::Blocked { next } => (me, next),
+                BlockResult::NotBlocked => continue,
+            }
+        };
+        match next {
+            Some(next) => switch_between(me, next),
+            None => loop {
+                unsafe { core::arch::asm!("wfi") };
+            },
+        }
+    }
+}
+
+pub const MAX_TASKS: usize = 8;
 
 /// Меньше значение — выше приоритет (как у GIC).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -428,5 +471,51 @@ impl Scheduler {
                 "current not Running"
             );
         }
+    }
+
+    pub(crate) fn drain_irq(&mut self) {
+        let mut ready = READY.swap(0, Ordering::Acquire);
+        while ready != 0 {
+            let id = ready.trailing_zeros() as usize;
+            ready &= ready - 1;
+            let bits = PENDING[id].swap(0, Ordering::Acquire);
+            if bits != 0 {
+                self.wake(id, bits);
+            }
+        }
+    }
+}
+
+static WAKERS: [AtomicU32; 32] = [const { AtomicU32::new(u32::MAX) }; 32];
+static PENDING: [AtomicU32; MAX_TASKS] = [const { AtomicU32::new(0) }; MAX_TASKS];
+static READY: AtomicU32 = AtomicU32::new(0);
+
+pub(crate) fn wake_from_isr(id: usize, bits: EventSet) {
+    if id >= MAX_TASKS || bits == 0 {
+        return;
+    }
+    PENDING[id].fetch_or(bits, Ordering::Release);
+    READY.fetch_or(1u32 << id, Ordering::Release);
+}
+
+pub fn set_waker(ev: EventSet, id: usize) {
+    debug_assert!(id < MAX_TASKS);
+    let idx = events::bit_index(ev);
+    if idx >= WAKERS.len() {
+        return;
+    }
+    WAKERS[events::bit_index(ev)].store(id as u32, Ordering::Release);
+}
+
+/// Из ISR: сам находит адресата по событию.
+pub fn wake_from_event(ev: EventSet) {
+    let idx = events::bit_index(ev);
+    if idx >= WAKERS.len() {
+        return;
+    }
+
+    let id = WAKERS[events::bit_index(ev)].load(Ordering::Acquire);
+    if (id as usize) < MAX_TASKS {
+        wake_from_isr(id as usize, ev);
     }
 }
