@@ -16,6 +16,12 @@ stage: 5
 >
 > Практический компромисс: разрешено мигрировать сейчас, но **до H2/0.5** и строго с гейтом «поведение не изменилось». Если `just smoke` после миграции красный — откатываем миграцию, а не правим asm по ходу.
 
+> [!success] Решено 2026-11-11
+> - Префикс `fw-` у крейтов остаётся.
+> - Порядок: сначала workspace (1.1–1.2), затем `fw-sync`, затем H2 и 0.5 уже в новом дереве.
+> - `probe/` имеет собственный `[workspace]` и миграцию не замечает.
+> - **1.1–1.2 пройдены:** `cargo fw`/`fwc` работают, QEMU-вывод совпал с эталоном (включая `VBAR`), оставались ошибки в `justfile` — см. [[justfile]].
+
 ## Шаг 1.1 — механический перенос
 
 ```bash
@@ -91,6 +97,18 @@ fwr = "run    --target aarch64-unknown-none -p firmware"
 fwc = "clippy --target aarch64-unknown-none -p firmware -- -D warnings"
 ```
 
+> [!warning] `fwc` не принимает дополнительные флаги
+> Всё, что дописывается к вызову алиаса, попадает в конец команды — то есть **после `--`**, к rustc. `cargo fwc --features selftest` даст ошибку `unexpected argument '--features'`.
+> Для четырёх конфигураций clippy в `justfile` вызывать явно:
+>
+> ```make
+> clippy:
+>     cargo clippy --target aarch64-unknown-none -p firmware -- -D warnings
+>     cargo clippy --target aarch64-unknown-none -p firmware --features selftest -- -D warnings
+>     cargo clippy --target aarch64-unknown-none -p firmware --features schedtest -- -D warnings
+>     cargo clippy --target aarch64-unknown-none -p firmware --features selftest,schedtest -- -D warnings
+> ```
+
 Убрать `[build] target` и `rustflags` с `-Tlinker.ld`: иначе host-тесты уедут в кросс-сборку, а относительный путь к линкеру сломается при запуске из подкаталога.
 
 > [!warning] Цена варианта 2B
@@ -106,9 +124,12 @@ just smoke                     # должно быть зелёно (после 
 
 Обязательные правки `justfile`:
 
-- путь к образу: `target/aarch64-unknown-none/debug/bare-metal-firewall` → `target/aarch64-unknown-none/debug/firmware`;
-- `cargo build` → `cargo fw`, `cargo build --features selftest` → `cargo fw --features selftest`, и т.д.;
-- `clippy` → `cargo fwc` (+ `--features …`), `cargo fmt` не меняется.
+- `kernel := "target/aarch64-unknown-none/debug/bare-metal-firewall"` → `.../debug/firmware`;
+- `cargo build` → `cargo fw`, `cargo build --release` → `cargo fw --release`, `cargo build --features selftest` → `cargo fw --features selftest`;
+- `cargo run` / `cargo run --features …` → `cargo fwr` / `cargo fwr --features …`;
+- блок `clippy` — явные вызовы с `--target` и `-p firmware` (см. предупреждение выше), потому что `cargo fwc --features …` не работает;
+- `symbols`: путь `nm` к `…/firmware`;
+- `cargo fmt` не меняется.
 
 Без этого `just smoke` будет искать несуществующий бинарь и «падать» на пустом месте.
 
@@ -188,6 +209,28 @@ mod tests {
 | плата | адреса, EL, UART, реальные тайминги | `probe/` ([[h2_minimal_image]]), потом `schedtest` |
 
 Правило дисциплины: **policy-крейт не должен зависеть от `fw-bsp-*`/`fw-arch-*`**. Если понадобилось — граница проведена неверно.
+
+## Baseline до миграции
+
+Без эталона «поведение не изменилось» проверить нечем. Снять до любых правок:
+
+```bash
+cargo build && cargo run --features selftest > /tmp/before-selftest.log 2>&1 || true
+FW_TIMEOUT=20 just smoke && cp -r target/logs /tmp/before-logs
+```
+
+После миграции сравнивать не байты, а маркеры: `Hello from QEMU virt!`, `MMU on!`, `VBAR:`, `sched: … ok`, `selftest: OK`, `ticks = N (+1)`. Адреса (`VBAR`, `stack_top`) могут сдвинуться — это нормально, другой расклад линковки.
+
+## Границы, которые придётся решить
+
+| Вопрос | Рекомендация | Почему |
+|---|---|---|
+| Куда едет `_start` | остаётся в `firmware` | обнуление `.bss`, стек, понижение EL — это про конкретный образ, а не про переиспользуемый механизм |
+| Что тогда в `fw-arch-a64` | векторы + trampoline, `sched_switch`, обёртки sysreg, `IrqSafeSpinLock` | нужны `asm!` и DAIF; host-тесты там невозможны по определению |
+| `global_asm!` в библиотеке | допустим | секции `.vectors`/`.text` склеиваются линкером через границы крейтов, `linker.ld` менять не нужно |
+| `IrqSafeSpinLock` в `fw-sync` | нет | иначе `fw-sync` перестаёт тестироваться на хосте |
+| `selftest`/`schedtest` | только feature `firmware` | features унифицируются по графу зависимостей |
+| `#[panic_handler]`, `#[global_allocator]` | только в `firmware` | два таких элемента в графе — ошибка линковки |
 
 ## Откат
 

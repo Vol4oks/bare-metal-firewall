@@ -5,6 +5,7 @@ extern crate alloc;
 
 use core::arch::global_asm;
 use core::panic::PanicInfo;
+pub(crate) use fw_sync as sync;
 
 mod board;
 mod events;
@@ -14,7 +15,6 @@ mod idle;
 mod irq;
 mod mmu;
 mod scheduler;
-mod sync;
 mod ticker;
 mod timer;
 mod uart;

@@ -48,6 +48,39 @@ qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a55 -smp 4 -m 1024M \
 
 ## Файл
 
+> [!warning] Листинг ниже — состояние до перехода на workspace
+> Актуальный файл — в репозитории. После 1.1–1.2 отличаются только эти строки:
+>
+> ```just
+> kernel := "target/aarch64-unknown-none/debug/firmware"
+>
+> build:
+>     cargo fw
+> release:
+>     cargo fw --release
+> run:
+>     cargo fwr
+> run-selftest:
+>     cargo fwr --features selftest
+> run-schedtest:
+>     cargo fwr --features schedtest
+>
+> # в smoke-рецептах: cargo build … → cargo fw …
+> # в symbols: путь к бинарю → …/debug/firmware
+> ```
+>
+> Блок `clippy` теперь не может быть «голым»: без `[build] target` он соберёт `firmware` под host и упадёт:
+>
+> ```just
+> clippy:
+>     cargo clippy --target aarch64-unknown-none -p firmware -- -D warnings
+>     cargo clippy --target aarch64-unknown-none -p firmware --features selftest -- -D warnings
+>     cargo clippy --target aarch64-unknown-none -p firmware --features schedtest -- -D warnings
+>     cargo clippy --target aarch64-unknown-none -p firmware --features selftest,schedtest -- -D warnings
+> ```
+>
+> Через `fwc` нельзя: дописанные аргументы уходят после `--`, то есть rustc, а не cargo.
+
 ```just
 # justfile — сборка, линт и smoke-прогоны в QEMU
 # Установка: sudo apt install just   или   cargo install just
@@ -193,6 +226,7 @@ symbols: build
 > - Проверка `PANIC` идёт раньше остальных: иначе «нет тиков» может означать падение.
 > - Если QEMU не стартовал, `-serial file:` не создаст лог — это ловится `[ -f "$log" ]`.
 > - Негативные сценарии не автоматизируются: они требуют правки кода. Когда появится workspace, их можно вынести в фичу `hog`.
+> - **«no banner» на пустом логе = неверный путь `kernel`, а не проблема гостя.** `-serial file:` создаёт файл ещё до загрузки ядра, поэтому проверка `[ -f "$log" ]` проходит, а QEMU молча падает на отсутствующем файле (stderr уходит в `/dev/null`). Сначала сверить имя бинаря: после workspace это `…/debug/firmware`, а не `…/debug/bare-metal-firewall`.
 
 ## Связанные заметки
 - [[cargo_aliases]], [[qemu_adaptation]], [[no_std_testing]], [[stage5_0_4_review]], [[roadmap_5_12]]

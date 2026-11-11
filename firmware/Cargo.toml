@@ -1,0 +1,12 @@
+[package]
+name = "firmware"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+selftest = []
+schedtest = []
+
+[dependencies]
+fw-sync = { workspace = true }

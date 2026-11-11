@@ -1,16 +1,18 @@
-[package]
-name = "bare-metal-firewall"
+[workspace]
+resolver = "3"
+members = [
+    "firmware",
+    "crates/*",
+    ]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+
+[workspace.dependencies]
+fw-sync = { path = "crates/fw-sync" }
 
 [profile.dev]
 panic = "abort"
 [profile.release]
 panic = "abort"
-
-[features]
-default = []
-selftest = []
-schedtest = []
-
-[dependencies]

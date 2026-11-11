@@ -8,7 +8,7 @@ set shell := ["sh", "-c"]
 tmout  := env("FW_TIMEOUT", "12")
 logdir := "target/logs"
 qemu   := "qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a55 -smp 4 -m 1024M -display none -monitor none"
-kernel := "target/aarch64-unknown-none/debug/bare-metal-firewall"
+kernel := "target/aarch64-unknown-none/debug/firmware"
 
 default:
     @just --list
@@ -16,10 +16,10 @@ default:
 # ---------- сборка ----------
 
 build:
-    cargo build
+    cargo fw
 
 release:
-    cargo build --release
+    cargo fw --release
 
 clean:
     cargo clean
@@ -34,10 +34,10 @@ fmt-check:
 
 # clippy во всех конфигурациях фич
 clippy:
-    cargo clippy -- -D warnings
-    cargo clippy --features selftest -- -D warnings
-    cargo clippy --features schedtest -- -D warnings
-    cargo clippy --features selftest,schedtest -- -D warnings
+    cargo clippy --target aarch64-unknown-none -p firmware -- -D warnings
+    cargo clippy --target aarch64-unknown-none -p firmware --features selftest -- -D warnings
+    cargo clippy --target aarch64-unknown-none -p firmware --features schedtest -- -D warnings
+    cargo clippy --target aarch64-unknown-none -p firmware --features selftest,schedtest -- -D warnings
 
 # быстрая проверка без QEMU
 check: fmt-check clippy build release
@@ -46,13 +46,13 @@ check: fmt-check clippy build release
 # ---------- интерактивные прогоны (выход — Ctrl-C) ----------
 
 run:
-    cargo run
+    cargo fwr
 
 run-selftest:
-    cargo run --features selftest
+    cargo fwr --features selftest
 
 run-schedtest:
-    cargo run --features schedtest
+    cargo fwr --features schedtest
 
 # ---------- smoke: QEMU сам не завершается ----------
 # timeout ожидаем (код 124); решение принимается по маркерам в логе.
@@ -62,7 +62,7 @@ smoke-default:
     set -eu
     mkdir -p {{logdir}}
     log={{logdir}}/default.log
-    cargo build >/dev/null
+    cargo fw >/dev/null
     rm -f "$log"
     timeout {{tmout}} {{qemu}} -serial file:"$log" -kernel {{kernel}} >/dev/null 2>&1 || true
     [ -f "$log" ] || { echo "FAIL default: qemu did not start"; exit 1; }
@@ -76,7 +76,7 @@ smoke-selftest:
     set -eu
     mkdir -p {{logdir}}
     log={{logdir}}/selftest.log
-    cargo build --features selftest >/dev/null
+    cargo fw --features selftest >/dev/null
     rm -f "$log"
     timeout {{tmout}} {{qemu}} -serial file:"$log" -kernel {{kernel}} >/dev/null 2>&1 || true
     [ -f "$log" ] || { echo "FAIL selftest: qemu did not start"; exit 1; }
@@ -91,7 +91,7 @@ smoke-schedtest:
     set -eu
     mkdir -p {{logdir}}
     log={{logdir}}/schedtest.log
-    cargo build --features schedtest >/dev/null
+    cargo fw --features schedtest >/dev/null
     rm -f "$log"
     timeout {{tmout}} {{qemu}} -serial file:"$log" -kernel {{kernel}} >/dev/null 2>&1 || true
     [ -f "$log" ] || { echo "FAIL schedtest: qemu did not start"; exit 1; }
@@ -106,7 +106,7 @@ smoke-both:
     set -eu
     mkdir -p {{logdir}}
     log={{logdir}}/both.log
-    cargo build --features selftest,schedtest >/dev/null
+    cargo fw --features selftest,schedtest >/dev/null
     rm -f "$log"
     timeout {{tmout}} {{qemu}} -serial file:"$log" -kernel {{kernel}} >/dev/null 2>&1 || true
     [ -f "$log" ] || { echo "FAIL both: qemu did not start"; exit 1; }
@@ -120,13 +120,17 @@ smoke-both:
 # все QEMU-сценарии
 smoke: smoke-default smoke-selftest smoke-schedtest smoke-both
 
+test:
+    cargo fwt
+    cargo clippy -p fw-sync --all-targets -- -D warnings
+
 # полная проверка перед коммитом
-ci: check smoke
+ci: check test smoke
     @echo "CI: OK"
 
 # глобальные символы asm в собранном образе
 symbols: build
-    nm target/aarch64-unknown-none/debug/bare-metal-firewall | grep -E "sched_switch|sched_start"
+    nm {{kernel}} | grep -E "sched_switch|sched_start"
 
 # Негативные сценарии (маска / счётчик / без waker) требуют временной правки кода:
 # см. doc/review/stage5_0_4_review.md
